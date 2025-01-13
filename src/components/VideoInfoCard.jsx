@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { LuEye } from "react-icons/lu";
 import { BiLike } from "react-icons/bi";
 import { FaRegCommentAlt, FaRegClock } from "react-icons/fa";
@@ -13,14 +13,18 @@ import * as motion from "motion/react-client";
 import { abbreviateNumber } from "../utils/abbreviateNumber";
 import { AnimatePresence } from "motion/react";
 import { IoArrowBackSharp } from "react-icons/io5";
+import { ThemeContext } from "../context/ThemeContext";
 
 export default function VideoInfoCard({
+  index,
   videoInfo,
   channelInfo,
   handleFetchChannelInfo,
   isOpenChannelInfo,
   setIsOpenChannelInfo,
 }) {
+  const { isDark } = useContext(ThemeContext);
+
   // Deconstruct data
   const snippet = videoInfo?.snippet || {};
   const statistics = videoInfo?.statistics || {};
@@ -36,10 +40,16 @@ export default function VideoInfoCard({
     <AnimatePresence>
       <motion.li
         initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+        animate={{
+          opacity: 1,
+          transition: { delay: index * 0.1, duration: 0.3 },
+        }}
         exit={{ opacity: 0 }}
-        key={videoInfo.id}
-        className="group rounded-md p-1 border-opacity-10 shadow-sm shadow-white overflow-hidden backdrop-blur-sm bg-gradient-to-l from-slate-500/20 to-slate-900/80"
+        className={`group rounded-md p-1 border-opacity-10 shadow-sm shadow-black dark:shadow-white overflow-hidden backdrop-blur-xl bg-gradient-to-l ${
+          isDark
+            ? "from-slate-500/20 to-slate-900/80"
+            : "from-slate-300/40 to-slate-100/90"
+        }`}
       >
         {/* --- Top Row: Thumbnail + Title/Channel --- */}
         <div className="flex gap-2 ">
@@ -95,12 +105,14 @@ export default function VideoInfoCard({
                 </a>
               ) : (
                 <button
-                  className="flex items-center gap-x-1 text-md hover:underline"
+                  className="flex items-center gap-x-1 text-md hover:underline "
                   onClick={() => handleFetchChannelInfo(snippet.channelId)}
                 >
                   <IoMdMore />
                   <GrChannel className="text-xl mb-1" />
-                  <p className="font-semibold">{snippet.channelTitle}</p>
+                  <p className="font-semibold line-clamp-1 text-start">
+                    {snippet.channelTitle}
+                  </p>
                 </button>
               )}
 
@@ -112,10 +124,10 @@ export default function VideoInfoCard({
                   </button>
                   <button
                     onClick={() => setIsOpenChannelInfo((prev) => !prev)}
-                    className="text-white"
+                    className="  "
                   >
                     <FaPlus
-                      className={`${
+                      className={` ${
                         isSameChannel && isOpenChannelInfo ? "rotate-45" : ""
                       } transition-all`}
                     />
@@ -125,7 +137,23 @@ export default function VideoInfoCard({
             </div>
           </div>
         </div>
-
+        {/* Tags list */}
+        {!isSameChannel && (
+          <div className="flex flex-wrap line-clamp-2  font-thin  w-full p-1  items-center justify-start">
+            {snippet?.tags?.map((tag, i) => {
+              if (i < 5 && tag.length < 20) {
+                return (
+                  <span
+                    className="hover:text-blue-600 transition-colors cursor-default ml-2"
+                    key={i}
+                  >
+                    #{tag}
+                  </span>
+                );
+              }
+            })}
+          </div>
+        )}
         {/* --- Stats Row --- */}
         {isSameChannel ? (
           // Channel-level stats
@@ -190,12 +218,12 @@ export default function VideoInfoCard({
           <div
             className={`overflow-hidden transition-all duration-300 mt-2 
             ${isOpenChannelInfo ? "max-h-40" : "max-h-0"}
-            bg-gray-800/50 rounded-md px-2`}
+            bg-gray-200 dark:bg-gray-800/50 rounded-md px-2`}
           >
             <h4 className="font-semibold text-lg mb-1">
               Más información del canal:
             </h4>
-            <ul className="text-gray-200 text-sm pl-4 list-disc space-y-1">
+            <ul className=" text-sm pl-4 list-disc space-y-1">
               <li>País: {channelSnippet?.country || "N/A"}</li>
 
               <li>

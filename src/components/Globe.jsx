@@ -1,9 +1,14 @@
 import * as d3 from "d3";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useContext } from "react";
 import { convertIsoA3ToIsoA2 } from "../utils/countryCodeConverter";
 import { LuTurtle } from "react-icons/lu";
 import { LuRabbit } from "react-icons/lu";
-
+import { FaSpotify } from "react-icons/fa";
+import { FaYoutube } from "react-icons/fa";
+import PlatformContext from "../context/PlatformProvider";
+import { AnimatePresence } from "motion/react";
+import * as motion from "motion/react-client";
+import { ThemeContext } from "../context/ThemeContext";
 // Spherical geometry helpers for “isVisible”
 const radians = Math.PI / 180;
 const degrees = 180 / Math.PI;
@@ -31,17 +36,20 @@ function isVisible(lon, lat, [lambdaRotate, phiRotate, gamma]) {
   return dist < 90;
 }
 
-const Globe = ({ handleCountryClick }) => {
+const Globe = ({ setSelectedCountry }) => {
   const [geoJson, setGeoJson] = useState(null);
   const [countries, setCountries] = useState([]);
   const [hoveredCountry, setHoveredCountry] = useState(null);
   const [grat, setGrat] = useState("");
+  const { currentPlatform } = useContext(PlatformContext);
+  const { isDark } = useContext(ThemeContext);
+
   // 1) Add rotationSpeed & autoRotate
   const [globeState, setGlobeState] = useState({
     type: "Orthographic",
     scale: 400,
-    translateX: 0,
-    translateY: 0,
+    translateX: window.innerWidth / 2,
+    translateY: window.innerHeight / 2,
     centerLon: 0,
     centerLat: 0,
     rotateLambda: 0,
@@ -65,16 +73,32 @@ const Globe = ({ handleCountryClick }) => {
         width: window.innerWidth,
         height: window.innerHeight,
       };
+
+      // Compute the diameter
+      const diameter = 2 * globeState.scale * 0.5;
+      const extraSpace = 500;
+      // Decide how to position X
+      // If the globe + 500px is bigger than the screen width,
+      // horizontally center it. Otherwise, push it to about 3/4 of the screen.
+      let newTranslateX;
+      if (diameter + extraSpace < window.innerWidth) {
+        newTranslateX = window.innerWidth / 3; // center
+      } else {
+        newTranslateX = window.innerWidth / 2; // 3/4
+      }
+
+      // Only update translateX; leave translateY as is
       setGlobeState((prev) => ({
         ...prev,
-        translateX: window.innerWidth / 2,
-        translateY: window.innerHeight / 2,
+        translateX: newTranslateX,
       }));
     };
+
+    // Run once and again on resize
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [globeState.scale, globeState.zoom]);
 
   // Load GeoJSON once
   useEffect(() => {
@@ -85,19 +109,19 @@ const Globe = ({ handleCountryClick }) => {
 
   // 2) Auto-rotate effect
   useEffect(() => {
-    let rotationTimer;
-    if (globeState.autoRotate) {
-      rotationTimer = d3.timer(() => {
-        setGlobeState((prev) => ({
-          ...prev,
-          rotateLambda: prev.rotateLambda + prev.rotationSpeed,
-        }));
-      });
-    }
-    return () => {
-      if (rotationTimer) rotationTimer.stop();
-    };
-  }, [globeState.autoRotate, globeState.rotationSpeed]);
+    if (!globeState.autoRotate) return;
+
+    const rotationTimer = d3.timer((elapsed) => {
+      // ...
+      setGlobeState((prev) => ({
+        ...prev,
+        rotateLambda: prev.rotateLambda + prev.rotationSpeed,
+      }));
+    });
+
+    return () => rotationTimer.stop();
+    // ONLY re-run if autoRotate toggles from false->true
+  }, [globeState.autoRotate]);
 
   // Recompute paths + attach interactions
   useEffect(() => {
@@ -105,7 +129,7 @@ const Globe = ({ handleCountryClick }) => {
 
     const projection = d3["geo" + globeState.type]()
       .scale(globeState.scale * globeState.zoom)
-      .translate([dimensions.current.width / 2, dimensions.current.height / 2])
+      .translate([globeState.translateX, globeState.translateY])
       .center([globeState.centerLon, globeState.centerLat])
       .rotate([
         globeState.rotateLambda,
@@ -173,7 +197,7 @@ const Globe = ({ handleCountryClick }) => {
 
   // Optional button for toggling rotation
   const toggleRotation = () => {
-    setGlobeState((prev) => ({
+    return setGlobeState((prev) => ({
       ...prev,
       autoRotate: !prev.autoRotate,
     }));
@@ -182,7 +206,7 @@ const Globe = ({ handleCountryClick }) => {
   return (
     <>
       {/* A toggle button to start/stop rotation (optional) */}
-      <div className="absolute z-20 flex items-center space-x-3 max-w-screen w-screen pl-2 top-[95vh]">
+      <div className="absolute z-20 flex items-center space-x-3 max-w-screen  pl-2 top-[95vh]   ml-2 ">
         <button
           onClick={toggleRotation}
           className=" rounded-md opacity-70 hover:opacity-100 transition-opacity  "
@@ -196,7 +220,7 @@ const Globe = ({ handleCountryClick }) => {
               ...prev,
               rotationSpeed: 0.03,
             }));
-            !globeState.autoRotate && toggleRotation();
+            return !globeState.autoRotate && toggleRotation();
           }}
         >
           <LuTurtle />
@@ -208,7 +232,7 @@ const Globe = ({ handleCountryClick }) => {
               ...prev,
               rotationSpeed: 0.5,
             }));
-            !globeState.autoRotate && toggleRotation();
+            return !globeState.autoRotate && toggleRotation();
           }}
         >
           <LuRabbit />
@@ -222,19 +246,44 @@ const Globe = ({ handleCountryClick }) => {
         className="absolute z-10"
       >
         {/* Graticule path */}
-        <path strokeWidth="0.2" stroke="white" fill="" d={grat}></path>
+        <path
+          strokeWidth="0.2"
+          stroke={`${isDark ? "white" : "gray"}`}
+          d={grat}
+          fill="transparent"
+        ></path>
+        {currentPlatform === "youtube" ? (
+          <FaYoutube
+            onClick={() => console.log(this)}
+            size={globeState.zoom * 200}
+            // size={(globeState.scale * globeState.zoom) / 4}
+            x={globeState.translateX - 100 * globeState.zoom}
+            y={globeState.translateY - 100 * globeState.zoom}
+            className="text-red-700 opacity-40"
+          ></FaYoutube>
+        ) : currentPlatform === "spotify" ? (
+          <FaSpotify
+            onClick={() => console.log(this)}
+            size={globeState.zoom * 200}
+            // size={(globeState.scale * globeState.zoom) / 4}
+            x={globeState.translateX - 100 * globeState.zoom}
+            y={globeState.translateY - 100 * globeState.zoom}
+            className="text-green-700 opacity-40"
+          ></FaSpotify>
+        ) : (
+          ""
+        )}
 
-        {/* Glow-ish boundary circle */}
         <circle
           cx={globeState.translateX}
           cy={globeState.translateY}
           r={globeState.scale * globeState.zoom * 1.03}
-          fill=""
-          stroke="lightblue"
+          stroke={isDark ? "lightblue" : "gray"}
           strokeWidth="5"
           className="blur-md "
           fillOpacity="0.05"
         />
+        {/* Glow-ish boundary circle */}
 
         {/* Countries */}
         <g className="countries">
@@ -244,24 +293,32 @@ const Globe = ({ handleCountryClick }) => {
               <path
                 key={i}
                 d={d}
-                fill="#1d447e"
-                stroke="black"
+                fill={`${isDark ? "#1d447e" : "#D9EAFD"}`}
+                stroke={`${isDark ? "black" : "lightgray"}`}
                 strokeWidth="1"
-                className="transition-colors z-10"
+                className={`
+                  transition-colors 
+                  z-10 
+                  ${
+                    hoveredCountry &&
+                    hoveredCountry.properties.iso_a3 ===
+                      country.properties.iso_a3
+                      ? "flowing-dashed"
+                      : ""
+                  }
+                `}
                 onClick={() => {
-                  handleCountryClick(
-                    convertIsoA3ToIsoA2(country.properties.iso_a3),
-                    country.properties.name
+                  setSelectedCountry(
+                    convertIsoA3ToIsoA2(country.properties.iso_a3)
                   );
-                  console.log(`Clicked on: ${country.properties.name}`);
                 }}
                 onMouseOver={(e) => {
-                  e.target.style.fill = "#275cad";
-                  setHoveredCountry(country);
+                  // e.target.style.fill = "#275cad";
+                  return setHoveredCountry(country);
                 }}
                 onMouseOut={(e) => {
-                  e.target.style.fill = "#1d447e";
-                  setHoveredCountry(null);
+                  // e.target.style.fill = `${isDark ? "#1d447e" : "#D9EAFD"}`;
+                  return setHoveredCountry(null);
                 }}
               />
             );
@@ -302,14 +359,16 @@ const Globe = ({ handleCountryClick }) => {
                 key={i}
                 x={x}
                 y={y}
-                fill="white"
+                fill={`${isDark ? "white" : "black"}`}
                 fontSize="14"
                 textAnchor="middle"
-                className="drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]"
+                // className="drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]"
                 style={{
                   pointerEvents: "none",
                   opacity: textOpacity,
                   transition: "opacity 0.3s ease",
+                  fontWeight: "bold",
+                  letterSpacing: 1.2,
                 }}
               >
                 {country.properties.name}
@@ -340,10 +399,14 @@ const Globe = ({ handleCountryClick }) => {
                 <text
                   x={x}
                   y={y}
-                  fill="white"
+                  fill={`${isDark ? "white" : "black"}`}
                   fontSize="14"
                   textAnchor="middle"
-                  style={{ pointerEvents: "none" }}
+                  style={{
+                    pointerEvents: "none",
+                    fontWeight: "bold",
+                    letterSpacing: 1.2,
+                  }}
                 >
                   {hoveredCountry.properties.name}
                 </text>
